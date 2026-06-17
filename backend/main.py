@@ -157,10 +157,20 @@ async def sync_all():
                 garmin_creds["tokenstore"] = new_token
                 db.save_connector_credentials("garmin", garmin_creds)
 
-            stats = await asyncio.to_thread(connector.get_stats_since, sync_from)
-            count = db.save_garmin_stats(stats)
+            garmin_data = await asyncio.to_thread(connector.get_stats_since, sync_from)
+            daily_count    = db.save_garmin_stats(garmin_data.get("daily", []))
+            activity_count = db.save_garmin_activities(garmin_data.get("activities", []))
+            hr_count       = db.save_garmin_hr_samples(garmin_data.get("hr_samples", []))
+            db.save_garmin_stress_samples(garmin_data.get("stress_samples", []))
+            db.save_garmin_resp_samples(garmin_data.get("resp_samples", []))
+            db.save_garmin_body_battery(garmin_data.get("body_battery", []))
             db.update_connector_sync("garmin", datetime.now().isoformat())
-            results["garmin"] = {"success": True, "new_records": count}
+            results["garmin"] = {
+                "success": True,
+                "new_records": daily_count,
+                "new_activities": activity_count,
+                "new_hr_samples": hr_count,
+            }
         except Exception as e:
             results["garmin"] = {"success": False, "error": str(e)}
 
@@ -257,20 +267,28 @@ async def setup_garmin(creds: GarminCredentials):
         new_token = await asyncio.to_thread(connector.login)
 
         logger.info("Downloading Garmin history (last 30 days)…")
-        stats = await asyncio.to_thread(connector.get_stats_since, None)
+        garmin_data = await asyncio.to_thread(connector.get_stats_since, None)
 
         db.save_connector_credentials("garmin", {
             "email": creds.email,
             "password": creds.password,
             "tokenstore": new_token,
         })
-        count = db.save_garmin_stats(stats)
+        daily_count    = db.save_garmin_stats(garmin_data.get("daily", []))
+        activity_count = db.save_garmin_activities(garmin_data.get("activities", []))
+        hr_count       = db.save_garmin_hr_samples(garmin_data.get("hr_samples", []))
+        db.save_garmin_stress_samples(garmin_data.get("stress_samples", []))
+        db.save_garmin_resp_samples(garmin_data.get("resp_samples", []))
+        db.save_garmin_body_battery(garmin_data.get("body_battery", []))
         db.update_connector_sync("garmin", datetime.now().isoformat())
 
         return {
             "success": True,
-            "message": f"Garmin conectado. {count} días descargados.",
-            "count": count,
+            "message": (
+                f"Garmin conectado. {daily_count} días · "
+                f"{activity_count} actividades · {hr_count} muestras FC descargadas."
+            ),
+            "count": daily_count,
         }
     except Exception as e:
         logger.error(f"Garmin setup error: {e}")
@@ -319,7 +337,7 @@ async def get_epd():
     # Use latest Renpho weight as the calculation anchor
     garmin_configured  = db.get_connector_credentials("garmin") is not None
     garmin_last_sync   = db.get_last_sync_date("garmin")
-    garmin_summary     = db.get_garmin_summary_since(latest_at) if garmin_configured else {}
+    garmin_summary     = db.get_garmin_intraday_summary_since(latest_at) if garmin_configured else {}
 
     # Data gap: Garmin hasn't been synced up to the reference weight date
     garmin_data_gap = (

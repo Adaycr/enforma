@@ -51,16 +51,19 @@ class EPDEstimator:
         cal_reposo  = float(garmin_summary.get("calories_bmr_total",      0) or 0)
         cal_activas = float(garmin_summary.get("calories_active_total",   0) or 0)
         intens_min  = float(garmin_summary.get("intensity_minutes_total", 0) or 0)
-        avg_stress  = float(garmin_summary.get("avg_stress")  or 25.0)
-        avg_resp    = float(garmin_summary.get("avg_respiration") or 15.0)
-        days        = float(garmin_summary.get("days_with_data", 0) or 1)
+        avg_stress  = float(garmin_summary.get("avg_stress")        or 25.0)
+        avg_resp    = float(garmin_summary.get("avg_respiration")    or 15.0)
+        avg_hr      = float(garmin_summary.get("avg_hr")             or 65.0)
+        days        = float(garmin_summary.get("days_with_data", 0)  or 1)
 
         # Dynamic evaporation multipliers
-        intensity_f  = 1.0 + min(intens_min / 60.0, 3.0) * 0.20
-        stress_f     = 1.0 + min(avg_stress, 100.0) / 100.0 * 0.10
-        resp_f       = 1.0 + max(0.0, (avg_resp - 12.0) / 30.0) * 0.05
+        intensity_f = 1.0 + min(intens_min / 60.0, 3.0) * 0.20
+        stress_f    = 1.0 + min(avg_stress, 100.0) / 100.0 * 0.10
+        resp_f      = 1.0 + max(0.0, (avg_resp - 12.0) / 30.0) * 0.05
+        # Heart rate factor: elevated HR → more sweat; normalised to 65 bpm resting baseline
+        hr_f        = 1.0 + min(max(0.0, (avg_hr - 65.0) / 65.0), 0.20)
 
-        tasa = self.evaporation_rate * intensity_f * stress_f * resp_f * self.fitness_factor
+        tasa = self.evaporation_rate * intensity_f * stress_f * resp_f * hr_f * self.fitness_factor
 
         # Garmin stores DAILY totals (since midnight), not since the weigh-in moment.
         # BMR is a stable background rate → spread over 24h.
@@ -92,6 +95,8 @@ class EPDEstimator:
             "tasa_evaporacion":    round(tasa, 5),
             "intensity_factor":    round(intensity_f, 3),
             "stress_factor":       round(stress_f, 3),
+            "hr_factor":           round(hr_f, 3),
+            "avg_hr":              round(avg_hr, 1),
         }
 
     def calibrate(
@@ -116,9 +121,9 @@ class EPDEstimator:
         old_kcal   = self.kcal_factor
 
         # ── Reconstruct calories burned (needed for kcal_factor calibration) ──
-        cal_reposo  = float(garmin_summary.get("calories_bmr_total",  0) or 0)
+        cal_reposo  = float(garmin_summary.get("calories_bmr_total",    0) or 0)
         cal_activas = float(garmin_summary.get("calories_active_total", 0) or 0)
-        days        = float(garmin_summary.get("days_with_data", 0) or 1)
+        days        = float(garmin_summary.get("days_with_data",        0) or 1)
         bmr_rate    = cal_reposo / (days * 24.0) if cal_reposo > 0 else 1500.0 / 24.0
         kcal_since_ref = (bmr_rate * elapsed_hours) + cal_activas
 

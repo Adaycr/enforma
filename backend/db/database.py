@@ -64,6 +64,45 @@ class Database:
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
 
+                CREATE TABLE IF NOT EXISTS garmin_activities (
+                    activity_id      TEXT PRIMARY KEY,
+                    start_time       TEXT NOT NULL,
+                    end_time         TEXT,
+                    calories         INTEGER,
+                    activity_type    TEXT,
+                    duration_seconds REAL,
+                    distance_meters  REAL,
+                    avg_hr           INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS idx_activity_start
+                ON garmin_activities(start_time);
+
+                CREATE TABLE IF NOT EXISTS garmin_hr_samples (
+                    timestamp TEXT NOT NULL PRIMARY KEY,
+                    bpm       INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_hr_ts
+                ON garmin_hr_samples(timestamp);
+
+                CREATE TABLE IF NOT EXISTS garmin_stress_samples (
+                    timestamp    TEXT NOT NULL PRIMARY KEY,
+                    stress_level INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS idx_stress_ts
+                ON garmin_stress_samples(timestamp);
+
+                CREATE TABLE IF NOT EXISTS garmin_resp_samples (
+                    timestamp       TEXT NOT NULL PRIMARY KEY,
+                    breaths_per_min REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_resp_ts
+                ON garmin_resp_samples(timestamp);
+
+                CREATE TABLE IF NOT EXISTS garmin_body_battery (
+                    timestamp TEXT NOT NULL PRIMARY KEY,
+                    level     REAL
+                );
+
                 CREATE TABLE IF NOT EXISTS epd_parameters (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     evaporation_rate_kg_h REAL DEFAULT 0.040,
@@ -150,6 +189,11 @@ class Database:
                 conn.execute("DELETE FROM renpho_measurements")
             elif name == "garmin":
                 conn.execute("DELETE FROM garmin_daily_stats")
+                conn.execute("DELETE FROM garmin_activities")
+                conn.execute("DELETE FROM garmin_hr_samples")
+                conn.execute("DELETE FROM garmin_stress_samples")
+                conn.execute("DELETE FROM garmin_resp_samples")
+                conn.execute("DELETE FROM garmin_body_battery")
 
     # ── Renpho Measurements ───────────────────────────────────────────────────
 
@@ -296,22 +340,185 @@ class Database:
                     logger.warning(f"Skipping Garmin day {s.get('date')}: {e}")
         return count
 
-    def get_garmin_summary_since(self, since_date: Optional[str]) -> dict:
-        """Aggregate Garmin KPIs accumulated since since_date for EPD calculation."""
+    # ── Intraday save methods ─────────────────────────────────────────────────
+
+    def save_garmin_activities(self, activities: List[dict]) -> int:
+        count = 0
         with self._get_conn() as conn:
-            filter_sql = f"WHERE date >= '{since_date[:10]}'" if since_date else ""
-            row = conn.execute(f"""
-                SELECT
-                    COALESCE(SUM(calories_bmr), 0)    AS calories_bmr_total,
-                    COALESCE(SUM(calories_active), 0) AS calories_active_total,
-                    COALESCE(SUM(intensity_minutes), 0) AS intensity_minutes_total,
-                    AVG(avg_stress)                   AS avg_stress,
-                    AVG(avg_respiration)              AS avg_respiration,
-                    COUNT(*)                          AS days_with_data
+            for a in activities:
+                try:
+                    conn.execute("""
+                        INSERT OR IGNORE INTO garmin_activities
+                        (activity_id, start_time, end_time, calories,
+                         activity_type, duration_seconds, distance_meters, avg_hr)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        a.get("activity_id"),
+                        a.get("start_time"),
+                        a.get("end_time"),
+                        a.get("calories"),
+                        a.get("activity_type"),
+                        a.get("duration_seconds"),
+                        a.get("distance_meters"),
+                        a.get("avg_hr"),
+                    ))
+                    if conn.execute("SELECT changes()").fetchone()[0] > 0:
+                        count += 1
+                except Exception as e:
+                    logger.warning(f"Skipping activity {a.get('activity_id')}: {e}")
+        return count
+
+    def save_garmin_hr_samples(self, samples: List[dict]) -> int:
+        count = 0
+        with self._get_conn() as conn:
+            for s in samples:
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO garmin_hr_samples (timestamp, bpm) VALUES (?, ?)",
+                        (s.get("timestamp"), s.get("bpm")),
+                    )
+                    if conn.execute("SELECT changes()").fetchone()[0] > 0:
+                        count += 1
+                except Exception:
+                    pass
+        return count
+
+    def save_garmin_stress_samples(self, samples: List[dict]) -> int:
+        count = 0
+        with self._get_conn() as conn:
+            for s in samples:
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO garmin_stress_samples (timestamp, stress_level) VALUES (?, ?)",
+                        (s.get("timestamp"), s.get("stress_level")),
+                    )
+                    if conn.execute("SELECT changes()").fetchone()[0] > 0:
+                        count += 1
+                except Exception:
+                    pass
+        return count
+
+    def save_garmin_resp_samples(self, samples: List[dict]) -> int:
+        count = 0
+        with self._get_conn() as conn:
+            for s in samples:
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO garmin_resp_samples (timestamp, breaths_per_min) VALUES (?, ?)",
+                        (s.get("timestamp"), s.get("breaths_per_min")),
+                    )
+                    if conn.execute("SELECT changes()").fetchone()[0] > 0:
+                        count += 1
+                except Exception:
+                    pass
+        return count
+
+    def save_garmin_body_battery(self, samples: List[dict]) -> int:
+        count = 0
+        with self._get_conn() as conn:
+            for s in samples:
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO garmin_body_battery (timestamp, level) VALUES (?, ?)",
+                        (s.get("timestamp"), s.get("level")),
+                    )
+                    if conn.execute("SELECT changes()").fetchone()[0] > 0:
+                        count += 1
+                except Exception:
+                    pass
+        return count
+
+    # ── EPD Garmin summary ────────────────────────────────────────────────────
+
+    def get_garmin_intraday_summary_since(self, since_timestamp: Optional[str]) -> dict:
+        """
+        Precise EPD Garmin summary using intraday data when available.
+
+        Active calories: summed from garmin_activities starting AFTER since_timestamp
+          (exact: only exercise that happened after the weigh-in counts).
+        Intensity: summed from activity durations after since_timestamp.
+        HR, stress, respiration: averaged from intraday samples since since_timestamp
+          (real-time averages, not day-level estimates).
+        BMR: from daily stats (daily total normalised to rate in EPD).
+        Falls back to daily averages for stress/respiration if intraday tables are empty.
+        """
+        with self._get_conn() as conn:
+            ref_date = since_timestamp[:10] if since_timestamp else ""
+            ts       = since_timestamp or ""
+
+            # BMR from daily stats (reference day included for rate normalisation)
+            bmr_row = conn.execute(f"""
+                SELECT COALESCE(SUM(calories_bmr), 0) AS bmr_total,
+                       COUNT(*) AS days
                 FROM garmin_daily_stats
-                {filter_sql}
+                WHERE date >= '{ref_date}'
             """).fetchone()
-            return dict(row) if row else {}
+
+            # Active calories: only activities starting AFTER the weigh-in timestamp
+            act_row = conn.execute("""
+                SELECT COALESCE(SUM(calories), 0)          AS cal_active,
+                       COALESCE(SUM(duration_seconds), 0)  AS dur_s
+                FROM garmin_activities
+                WHERE start_time > ? AND calories > 0
+            """, (ts,)).fetchone()
+
+            # Intraday HR average since weigh-in
+            hr_row = conn.execute(
+                "SELECT AVG(bpm) AS avg_hr FROM garmin_hr_samples WHERE timestamp > ?", (ts,)
+            ).fetchone()
+
+            # Intraday stress average (exclude -1 / invalid readings)
+            stress_row = conn.execute("""
+                SELECT AVG(stress_level) AS avg_stress
+                FROM garmin_stress_samples
+                WHERE timestamp > ? AND stress_level >= 0
+            """, (ts,)).fetchone()
+
+            # Intraday respiration average
+            resp_row = conn.execute(
+                "SELECT AVG(breaths_per_min) AS avg_resp FROM garmin_resp_samples WHERE timestamp > ?",
+                (ts,)
+            ).fetchone()
+
+            # Fallback: daily averages if intraday tables are empty
+            daily_fallback = conn.execute(f"""
+                SELECT AVG(avg_stress) AS avg_stress, AVG(avg_respiration) AS avg_resp
+                FROM garmin_daily_stats
+                WHERE date >= '{ref_date}'
+            """).fetchone()
+
+            avg_hr    = hr_row["avg_hr"]    if hr_row    and hr_row["avg_hr"]    is not None else None
+            avg_stress = (
+                stress_row["avg_stress"]
+                if stress_row and stress_row["avg_stress"] is not None
+                else (daily_fallback["avg_stress"] if daily_fallback else None)
+            )
+            avg_resp = (
+                resp_row["avg_resp"]
+                if resp_row and resp_row["avg_resp"] is not None
+                else (daily_fallback["avg_resp"] if daily_fallback else None)
+            )
+
+            intraday_available = (
+                (hr_row     and hr_row["avg_hr"]           is not None) or
+                (stress_row and stress_row["avg_stress"]   is not None) or
+                (resp_row   and resp_row["avg_resp"]       is not None)
+            )
+
+            return {
+                "calories_bmr_total":      int(bmr_row["bmr_total"])     if bmr_row else 0,
+                "calories_active_total":   int(act_row["cal_active"])    if act_row else 0,
+                "intensity_minutes_total": int((act_row["dur_s"] or 0) / 60) if act_row else 0,
+                "avg_stress":              avg_stress,
+                "avg_respiration":         avg_resp,
+                "avg_hr":                  avg_hr,
+                "days_with_data":          int(bmr_row["days"])          if bmr_row else 0,
+                "intraday_available":      bool(intraday_available),
+            }
+
+    def get_garmin_summary_since(self, since_date: Optional[str]) -> dict:
+        """Delegates to get_garmin_intraday_summary_since for unified EPD summaries."""
+        return self.get_garmin_intraday_summary_since(since_date)
 
     def get_garmin_rhr_trend(self, days: int = 30) -> List[Optional[int]]:
         with self._get_conn() as conn:
