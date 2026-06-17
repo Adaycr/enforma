@@ -382,17 +382,17 @@ async def epd_process_weight(event: EPDWeightEvent):
             current_estimate = estimator.estimate(ref_weight, ref_at, garmin_summary)
             elapsed_h        = current_estimate["elapsed_hours"]
 
-            # Require at least 8 h between weigh-ins to calibrate.
-            # With shorter intervals, measurement noise (clothing, hydration, meals)
-            # dwarfs the real physiological signal and corrupts the parameters.
-            if elapsed_h < 8.0:
+            # Only calibrate when the new weigh-in is on a different calendar day
+            # than the reference. Same-day weighings carry too much noise (clothing,
+            # hydration, meals) relative to the physiological signal, but an overnight
+            # fast of even 6-7 h is sufficient to calibrate reliably.
+            if new_at[:10] == ref_at[:10]:
                 db.set_epd_reference_weight(new_weight, new_at)
                 return {
-                    "action":           "reference_updated_interval_too_short",
-                    "elapsed_hours":    round(elapsed_h, 2),
-                    "min_hours":        8.0,
+                    "action":            "reference_updated_same_day",
+                    "elapsed_hours":     round(elapsed_h, 2),
                     "new_ref_weight_kg": new_weight,
-                    "new_ref_at":       new_at,
+                    "new_ref_at":        new_at,
                 }
 
             fat_pct_ref = db.get_body_fat_at(ref_at)
