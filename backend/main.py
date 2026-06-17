@@ -382,14 +382,12 @@ async def epd_process_weight(event: EPDWeightEvent):
             current_estimate = estimator.estimate(ref_weight, ref_at, garmin_summary)
             elapsed_h        = current_estimate["elapsed_hours"]
 
-            # Only calibrate when the new weigh-in is on a different calendar day
-            # than the reference. Same-day weighings carry too much noise (clothing,
-            # hydration, meals) relative to the physiological signal, but an overnight
-            # fast of even 6-7 h is sufficient to calibrate reliably.
-            if new_at[:10] == ref_at[:10]:
+            # Require at least 2 h elapsed so the physiological signal
+            # (water + metabolic loss) is measurable above sensor noise.
+            if elapsed_h < 2.0:
                 db.set_epd_reference_weight(new_weight, new_at)
                 return {
-                    "action":            "reference_updated_same_day",
+                    "action":            "reference_updated_interval_too_short",
                     "elapsed_hours":     round(elapsed_h, 2),
                     "new_ref_weight_kg": new_weight,
                     "new_ref_at":        new_at,
