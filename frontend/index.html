@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnForma</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #f5f5f7;
+    --surface:     #ffffff;
+    --surface-2:   #f0f0f3;
+    --border:      #e0e0e5;
+    --text-1:      #1d1d1f;
+    --text-2:      #6e6e73;
+    --text-3:      #aeaeb2;
+    --accent:      #0071e3;
+    --accent-soft: #e8f0fb;
+    --green:       #34c759;
+    --green-soft:  #e8f8ec;
+    --red:         #ff3b30;
+    --red-soft:    #fff0ef;
+    --orange:      #ff9500;
+
+    --radius-sm:   10px;
+    --radius-md:   16px;
+    --radius-lg:   22px;
+
+    --font:        -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                   "Helvetica Neue", Arial, sans-serif;
+    
+    --shadow-sm:   0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md:   0 4px 16px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04);
+    --shadow-lg:   0 8px 32px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.06);
+  }
+
+  html { font-family: var(--font); background: var(--bg); color: var(--text-1); }
+  body { min-height: 100vh; }
+
+  /* ── Layout ───────────────────────────────────── */
+  .app-header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(245,245,247,.88);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .app-logo {
+    font-size: 17px; font-weight: 600; letter-spacing: -.3px;
+    color: var(--text-1);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .app-logo svg { color: var(--accent); }
+
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font); font-size: 14px; font-weight: 500;
+    border: none; cursor: pointer; border-radius: var(--radius-sm);
+    padding: 7px 14px; transition: all .15s ease;
+    text-decoration: none;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #0066cc; }
+  .btn-primary:active { transform: scale(.97); }
+  .btn-ghost {
+    background: transparent; color: var(--text-2);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: var(--surface-2); color: var(--text-1); }
+  .btn-sm { font-size: 13px; padding: 5px 11px; }
+
+  .btn-icon {
+    width: 32px; height: 32px; padding: 0;
+    border-radius: 8px; justify-content: center;
+  }
+
+  #sync-btn.syncing { opacity: .6; pointer-events: none; }
+  #sync-btn.syncing .sync-icon { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .sync-status {
+    font-size: 12px; color: var(--text-3);
+    white-space: nowrap;
+  }
+
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+
+  /* ── Section ──────────────────────────────────── */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-size: 13px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--text-2);
+  }
+
+  /* ── KPI Grid ─────────────────────────────────── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+
+  /* ── KPI Card ─────────────────────────────────── */
+  .kpi-card {
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    padding: 20px 22px 18px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease;
+    position: relative; overflow: hidden;
+  }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .kpi-card:active { transform: translateY(0); }
+
+  .kpi-card.loading::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.6) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .kpi-source {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--text-3);
+    margin-bottom: 10px;
+  }
+  .kpi-source-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .kpi-label {
+    font-size: 13px; color: var(--text-2); font-weight: 400;
+    margin-bottom: 4px;
+  }
+
+  .kpi-value-row {
+    display: flex; align-items: baseline; gap: 6px;
+    margin-bottom: 10px;
+  }
+  .kpi-value {
+    font-size: 36px; font-weight: 300; letter-spacing: -1.5px;
+    color: var(--text-1); line-height: 1;
+  }
+  .kpi-unit {
+    font-size: 16px; font-weight: 400; color: var(--text-2);
+    margin-bottom: 2px;
+  }
+
+  .kpi-delta {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 13px; font-weight: 500;
+    padding: 3px 8px; border-radius: 6px;
+  }
+  .kpi-delta.positive { color: var(--red); background: var(--red-soft); }
+  .kpi-delta.negative { color: var(--green); background: var(--green-soft); }
+  .kpi-delta.neutral  { color: var(--text-2); background: var(--surface-2); }
+  .kpi-delta svg { flex-shrink: 0; }
+
+  .kpi-date {
+    font-size: 11px; color: var(--text-3);
+    margin-top: 8px;
+  }
+
+  /* ── Empty / Setup state ──────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 64px 24px;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .empty-icon {
+    width: 56px; height: 56px;
+    background: var(--accent-soft);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px;
+    color: var(--accent);
+  }
+  .empty-title { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .empty-desc { font-size: 15px; color: var(--text-2); margin-bottom: 24px; max-width: 360px; margin-inline: auto; }
+
+  /* ── Modal ────────────────────────────────────── */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,.35);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease;
+  }
+  .modal-backdrop.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 100%; max-width: 480px;
+    transform: scale(.96) translateY(8px);
+    transition: transform .2s ease;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal-backdrop.open .modal { transform: scale(1) translateY(0); }
+
+  .modal-header {
+    padding: 24px 24px 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+  }
+  .modal-title { font-size: 18px; font-weight: 600; }
+  .modal-subtitle { font-size: 14px; color: var(--text-2); margin-top: 3px; }
+
+  .modal-close {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--surface-2); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-2); flex-shrink: 0;
+    transition: background .15s;
+  }
+  .modal-close:hover { background: var(--border); }
+
+  .modal-body { padding: 20px 24px 24px; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label {
+    display: block; font-size: 13px; font-weight: 500;
+    color: var(--text-1); margin-bottom: 6px;
+  }
+  .form-input {
+    width: 100%; padding: 10px 13px;
+    font-family: var(--font); font-size: 15px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text-1);
+    outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  .form-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,113,227,.12);
+  }
+
+  .form-hint { font-size: 12px; color: var(--text-3); margin-top: 5px; }
+
+  .form-error {
+    font-size: 13px; color: var(--red);
+    background: var(--red-soft);
+    border-radius: var(--radius-sm); padding: 10px 13px;
+    margin-bottom: 14px; display: none;
+  }
+  .form-error.visible { display: block; }
+
+  .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  .progress-bar-wrap {
+    height: 4px; background: var(--surface-2);
+    border-radius: 2px; margin: 12px 0;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%; background: var(--accent);
+    border-radius: 2px;
+    width: 0%; transition: width .3s ease;
+    animation: progress-indeterminate 1.4s infinite;
+  }
+  @keyframes progress-indeterminate {
+    0%   { transform: translateX(-100%); width: 60%; }
+    100% { transform: translateX(200%);  width: 60%; }
+  }
+  .progress-bar.done { animation: none; width: 100%; background: var(--green); }
+
+  /* ── Chart Modal ──────────────────────────────── */
+  .chart-modal .modal { max-width: 680px; }
+  .period-tabs {
+    display: flex; gap: 4px;
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    margin-bottom: 16px;
+  }
+  .period-tab {
+    flex: 1; text-align: center;
+    font-size: 13px; font-weight: 500; color: var(--text-2);
+    padding: 6px 8px; border-radius: 7px;
+    cursor: pointer; transition: all .15s;
+    border: none; background: none; font-family: var(--font);
+  }
+  .period-tab.active {
+    background: var(--surface);
+    color: var(--text-1);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .chart-container {
+    width: 100%; height: 240px; position: relative;
+  }
+  canvas { width: 100% !important; }
+
+  .chart-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 10px; margin-top: 16px;
+  }
+  .chart-stat {
+    background: var(--surface-2); border-radius: var(--radius-sm);
+    padding: 12px 14px;
+  }
+  .chart-stat-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .4px; }
+  .chart-stat-value { font-size: 18px; font-weight: 600; margin-top: 2px; }
+
+  /* ── Notification ─────────────────────────────── */
+  .toast-container {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 300; display: flex; flex-direction: column; gap: 8px;
+    align-items: center; pointer-events: none;
+  }
+  .toast {
+    background: rgba(29,29,31,.88); color: #fff;
+    backdrop-filter: blur(12px);
+    padding: 10px 18px; border-radius: 20px;
+    font-size: 14px; font-weight: 500;
+    pointer-events: all;
+    animation: toast-in .25s ease forwards;
+  }
+  .toast.success { background: rgba(52,199,89,.92); }
+  .toast.error   { background: rgba(255,59,48,.92); }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Responsive ───────────────────────────────── */
+  @media (max-width: 600px) {
+    .app-header { padding: 0 16px; }
+    main { padding: 20px 16px 48px; }
+    .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .kpi-value { font-size: 28px; }
+    .sync-status { display: none; }
+    .chart-stats { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 380px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── EPD Featured Card ────────────────────────── */
+  .kpi-card.kpi-featured {
+    grid-column: span 2;
+    cursor: default;
+    padding: 22px 24px 20px;
+  }
+  .kpi-card.kpi-featured:hover { transform: none; box-shadow: var(--shadow-sm); }
+  .kpi-featured .kpi-value { font-size: 48px; }
+  .kpi-featured .kpi-unit  { font-size: 20px; }
+
+  .epd-live {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--text-3);
+    margin-bottom: 10px;
+  }
+  .epd-live-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: .35; transform: scale(.8); }
+  }
+
+  .epd-counters {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 8px; margin-top: 16px;
+  }
+  .epd-counter {
+    background: var(--surface-2);
+    border-radius: var(--radius-sm); padding: 10px 12px;
+  }
+  .epd-counter-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--text-3); margin-bottom: 5px;
+  }
+  .epd-counter-value {
+    font-size: 20px; font-weight: 600; color: var(--text-1); line-height: 1;
+  }
+  .epd-counter-unit {
+    font-size: 12px; font-weight: 400; color: var(--text-2);
+    margin-left: 2px;
+  }
+
+  .epd-no-garmin {
+    margin-top: 12px;
+    background: #fff8ee;
+    border: 1px solid #ffe5b0;
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    font-size: 13px; color: #a05c00;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .epd-no-garmin button {
+    margin-left: auto; background: var(--orange);
+    border: none; border-radius: 6px; padding: 4px 10px;
+    font-size: 12px; font-weight: 500; color: #fff; cursor: pointer;
+  }
+
+  /* ── Settings Modal ───────────────────────────── */
+  .connector-list { display: flex; flex-direction: column; gap: 12px; }
+  .connector-row {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--surface-2); border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .connector-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .connector-icon.renpho { background: #e8f0fb; color: var(--accent); }
+  .connector-icon.garmin { background: #fff0e8; color: #e86500; }
+  .connector-info { flex: 1; min-width: 0; }
+  .connector-name  { font-size: 14px; font-weight: 600; }
+  .connector-status { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .connector-status.ok { color: var(--green); }
+
+  /* ── Ingestion Modal ──────────────────────────── */
+  .ingestion-options { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .ingestion-btn {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 18px; border-radius: var(--radius-md);
+    border: 2px solid var(--border); background: var(--surface);
+    cursor: pointer; transition: all .15s; text-align: left;
+    font-family: var(--font); width: 100%;
+  }
+  .ingestion-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .ingestion-btn-icon { font-size: 24px; flex-shrink: 0; }
+  .ingestion-btn-label { font-size: 15px; font-weight: 500; color: var(--text-1); }
+  .ingestion-btn-desc  { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+
+  @media (max-width: 600px) {
+    .kpi-card.kpi-featured   { grid-column: span 2; }
+    .epd-counters            { grid-template-columns: 1fr 1fr; }
+    .kpi-featured .kpi-value { font-size: 36px; }
+    .kpi-featured .kpi-unit  { font-size: 16px; }
+  }
+  @media (max-width: 380px) {
+    .kpi-card.kpi-featured { grid-column: span 1; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────────── -->
+<header class="app-header">
+  <div class="app-logo">
+    <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z" fill="currentColor"/>
+    </svg>
+    EnForma
+  </div>
+  <div class="header-actions">
+    <span class="sync-status" id="sync-status">—</span>
+    <button class="btn btn-ghost btn-sm" id="settings-btn" title="Configuración">
+      <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+        <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="2"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </button>
+    <button class="btn btn-primary btn-sm" id="sync-btn">
+      <svg class="sync-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Actualizar
+    </button>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────────────── -->
+<main id="main-content">
+  <!-- Injected by JS -->
+</main>
+
+<!-- ── Setup Modal (Renpho) ───────────────────────────────────── -->
+<div class="modal-backdrop" id="setup-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Conectar Renpho</div>
+        <div class="modal-subtitle">Báscula de composición corporal</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('setup-modal')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--text-2);margin-bottom:18px;line-height:1.5">
+        Introduce las credenciales de tu cuenta Renpho Health (app con icono azul). 
+        Se descargarán todos tus datos históricos y se guardarán cifrados en local.
+      </p>
+      <div class="form-error" id="setup-error"></div>
+      <div class="form-group">
+        <label class="form-label" for="renpho-email">Email</label>
+        <input class="form-input" type="email" id="renpho-email" placeholder="tu@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="renpho-pass">Contraseña</label>
+        <input class="form-input" type="password" id="renpho-pass" placeholder="••••••••" autocomplete="current-password">
+        <div class="form-hint">Las credenciales se cifran con AES-256 y nunca salen de tu máquina.</div>
+      </div>
+      <div id="setup-progress" style="display:none">
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:6px" id="progress-msg">Iniciando sesión…</div>
+        <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="closeModal('setup-modal')">Cancelar</button>
+        <button class="btn btn-primary" id="setup-submit-btn" onclick="submitRenphoSetup()">
+          Conectar y descargar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Garmin Setup Modal ───────────────────────────────────────── -->
+<div class="modal-backdrop" id="garmin-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Conectar Garmin Connect</div>
+        <div class="modal-subtitle">Reloj Garmin fénix y similares</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('garmin-modal')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--text-2);margin-bottom:18px;line-height:1.5">
+        Introduce las credenciales de tu cuenta Garmin Connect. Se descargarán
+        los últimos 30 días de KPIs (calorías, estrés, respiración, FC reposo)
+        y se guardarán cifrados en local.
+      </p>
+      <div class="form-error" id="garmin-error"></div>
+      <div class="form-group">
+        <label class="form-label" for="garmin-email">Email de Garmin Connect</label>
+        <input class="form-input" type="email" id="garmin-email" placeholder="tu@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="garmin-pass">Contraseña</label>
+        <input class="form-input" type="password" id="garmin-pass" placeholder="••••••••" autocomplete="current-password">
+        <div class="form-hint">Las credenciales se cifran con AES-256 y nunca salen de tu máquina.</div>
+      </div>
+      <div id="garmin-progress" style="display:none">
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:6px" id="garmin-progress-msg">Conectando…</div>
+        <div class="progress-bar-wrap"><div class="progress-bar" id="garmin-progress-bar"></div></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="closeModal('garmin-modal')">Cancelar</button>
+        <button class="btn btn-primary" id="garmin-submit-btn" onclick="submitGarminSetup()">
+          Conectar y descargar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Settings Modal ──────────────────────────────────────────── -->
+<div class="modal-backdrop" id="settings-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Conexiones</div>
+        <div class="modal-subtitle">Gestiona tus fuentes de datos</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('settings-modal')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="connector-list" id="connector-list">
+        <!-- injected by JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ingestion Modal ─────────────────────────────────────────── -->
+<div class="modal-backdrop" id="ingestion-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Nuevo peso detectado</div>
+        <div class="modal-subtitle">Necesitamos contexto para calibrar el EPD</div>
+      </div>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--text-2);line-height:1.6">
+        ¿Has ingerido alimentos o líquidos (agua, café, comida) desde tu
+        última actualización de peso?
+      </p>
+      <div class="ingestion-options">
+        <button class="ingestion-btn" onclick="answerIngestion(true)">
+          <span class="ingestion-btn-icon">🍽️</span>
+          <div>
+            <div class="ingestion-btn-label">Sí, he comido o bebido</div>
+            <div class="ingestion-btn-desc">Se actualiza la referencia sin recalibrar el algoritmo</div>
+          </div>
+        </button>
+        <button class="ingestion-btn" onclick="answerIngestion(false)">
+          <span class="ingestion-btn-icon">⚡</span>
+          <div>
+            <div class="ingestion-btn-label">No, estoy en ayunas</div>
+            <div class="ingestion-btn-desc">Se recalibra el EPD con esta medición de báscula</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Chart Modal ─────────────────────────────────────────────── -->
+<div class="modal-backdrop chart-modal" id="chart-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="chart-title">Histórico</div>
+        <div class="modal-subtitle" id="chart-subtitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('chart-modal')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="period-tabs">
+        <button class="period-tab active" data-period="all" onclick="changePeriod(this)">Todo</button>
+        <button class="period-tab" data-period="year" onclick="changePeriod(this)">Año</button>
+        <button class="period-tab" data-period="month" onclick="changePeriod(this)">Mes</button>
+        <button class="period-tab" data-period="week" onclick="changePeriod(this)">Semana</button>
+      </div>
+      <div class="chart-container">
+        <canvas id="history-chart"></canvas>
+      </div>
+      <div class="chart-stats">
+        <div class="chart-stat">
+          <div class="chart-stat-label">Mínimo</div>
+          <div class="chart-stat-value" id="stat-min">—</div>
+        </div>
+        <div class="chart-stat">
+          <div class="chart-stat-label">Máximo</div>
+          <div class="chart-stat-value" id="stat-max">—</div>
+        </div>
+        <div class="chart-stat">
+          <div class="chart-stat-label">Promedio</div>
+          <div class="chart-stat-value" id="stat-avg">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toasts ──────────────────────────────────────────────────── -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ── Chart.js ───────────────────────────────────────────────── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+const API = '';
+let chartInstance   = null;
+let activeChartType = null;
+let activePeriod    = 'all';
+let epdData         = null;   // cached EPD response for live timer
+let epdTimerHandle  = null;
+
+// ── Init ───────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadDashboard();
+  document.getElementById('sync-btn').addEventListener('click', syncData);
+  document.getElementById('settings-btn').addEventListener('click', openSettings);
+
+  document.querySelectorAll('.modal-backdrop').forEach(el => {
+    el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); });
+  });
+
+  document.getElementById('renpho-pass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitRenphoSetup();
+  });
+  document.getElementById('garmin-pass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitGarminSetup();
+  });
+});
+
+// ── Dashboard Loader ───────────────────────────────────────────
+async function loadDashboard() {
+  const status = await apiFetch('/api/status');
+  const main   = document.getElementById('main-content');
+
+  if (!status || !status.configured) {
+    main.innerHTML = renderEmptyState();
+    return;
+  }
+
+  main.innerHTML = renderSkeleton();
+  await syncData();
+  updateSyncStatus(status.connectors);
+}
+
+function renderEmptyState() {
+  return `
+    <div class="empty-state">
+      <div class="empty-icon">
+        <svg width="28" height="28" fill="none" viewBox="0 0 24 24">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="empty-title">Sin conexiones configuradas</div>
+      <div class="empty-desc">Conecta Renpho y Garmin para activar el Estimador de Peso Dinámico.</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="openModal('setup-modal')">Conectar Renpho</button>
+        <button class="btn btn-ghost"   onclick="openModal('garmin-modal')">Conectar Garmin</button>
+      </div>
+    </div>`;
+}
+
+function renderSkeleton() {
+  return `
+    <div class="section-header">
+      <span class="section-title">Estimador de Peso Dinámico</span>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-featured loading" style="height:200px;grid-column:span 2"></div>
+      <div class="kpi-card loading" style="height:140px"></div>
+      <div class="kpi-card loading" style="height:140px"></div>
+    </div>`;
+}
+
+// ── KPI Loader ─────────────────────────────────────────────────
+async function loadKPIs() {
+  const main = document.getElementById('main-content');
+
+  const [epdRaw, weightData, fatData, metabolicData, kcalFactorData, garminStatus] = await Promise.all([
+    apiFetch('/api/kpi/epd'),
+    apiFetch('/api/kpi/weight'),
+    apiFetch('/api/kpi/body-fat'),
+    apiFetch('/api/kpi/metabolic-rate'),
+    apiFetch('/api/kpi/kcal-factor'),
+    apiFetch('/api/connectors/garmin/status'),
+  ]);
+
+  let html = '';
+
+  // EPD card always first and double-width
+  if (epdRaw || weightData) {
+    epdData = epdRaw;
+    html += renderEPDCard(epdRaw, weightData, garminStatus);
+    startEPDLiveUpdate();
+    // New unprocessed Renpho weight detected → ask fasting question
+    if (epdRaw?.needs_processing) {
+      setTimeout(() => openIngestionModal(), 400);
+    }
+  }
+
+  let bodyCards = '';
+  if (weightData)      bodyCards += renderKPICard('weight', 'Peso báscula', weightData, 'kg');
+  if (fatData)         bodyCards += renderKPICard('body-fat', '% Grasa corporal', fatData, '%');
+  if (metabolicData)   bodyCards += renderMetabolicCard(metabolicData);
+  if (kcalFactorData)  bodyCards += renderKPICard('kcal-factor', 'Factor kcal/kg', kcalFactorData, 'kcal/kg');
+
+  if (!html && !bodyCards) {
+    main.innerHTML = renderEmptyState();
+    return;
+  }
+
+  main.innerHTML = `
+    <div class="section-header">
+      <span class="section-title">Estimador de Peso Dinámico</span>
+      <span style="font-size:12px;color:var(--text-3)" id="epd-computed-badge"></span>
+    </div>
+    <div class="kpi-grid">${html}${bodyCards}</div>`;
+
+  if (epdRaw?.computed_at) {
+    document.getElementById('epd-computed-badge').textContent =
+      'Calculado ' + formatTime(epdRaw.computed_at);
+  }
+}
+
+// ── EPD Card ───────────────────────────────────────────────────
+function renderEPDCard(epd, weightFallback, garminStatus) {
+  const refWeight  = epd ? epd.last_weight_kg    : weightFallback?.value;
+  const refAt      = epd ? epd.last_weight_at    : weightFallback?.measured_at;
+  const estimated  = epd ? epd.estimated_weight  : refWeight;
+  const lost       = epd ? epd.total_lost_kg     : 0;
+  const kcal       = epd ? epd.calories_burned   : 0;
+  const lossRate   = epd ? epd.loss_rate_kg_h    : 0;
+  const computedAt = epd ? epd.computed_at       : new Date().toISOString();
+  const hasGarmin  = epd ? epd.garmin_connected  : false;
+
+  const deltaHTML = lost > 0
+    ? `<div class="kpi-delta negative">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+          <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        −${lost.toFixed(3)} kg desde báscula
+       </div>`
+    : '';
+
+  const garminDataGap  = epd?.garmin_data_gap;
+  const noGarminBanner = !hasGarmin
+    ? `<div class="epd-no-garmin">
+         ⚠️ Sin Garmin — estimación solo por tiempo
+         <button onclick="openModal('garmin-modal')">Conectar</button>
+       </div>`
+    : garminDataGap
+    ? `<div class="epd-no-garmin">
+         ⚠️ Garmin sin datos desde el último pesaje — pulsa Actualizar
+       </div>`
+    : '';
+
+  const timeStr    = refAt ? formatElapsed(refAt) : '—';
+  const lostStr    = lost  ? lost.toFixed(3)       : '0.000';
+  const kcalStr    = kcal  ? kcal.toLocaleString()  : '—';
+
+  return `
+    <div class="kpi-card kpi-featured">
+      <div class="kpi-source">
+        <span class="epd-live-dot"></span>
+        EPD · Garmin + Renpho
+      </div>
+      <div class="kpi-label">Peso estimado ahora</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" id="epd-weight">${estimated !== null ? estimated.toFixed(2) : '—'}</span>
+        <span class="kpi-unit">kg</span>
+      </div>
+      ${deltaHTML}
+      <div class="epd-counters">
+        <div class="epd-counter">
+          <div class="epd-counter-label">Último peso</div>
+          <div class="epd-counter-value" id="epd-timer">${timeStr}</div>
+        </div>
+        <div class="epd-counter">
+          <div class="epd-counter-label">Masa perdida</div>
+          <div class="epd-counter-value">
+            <span id="epd-lost">${lostStr}</span><span class="epd-counter-unit">kg</span>
+          </div>
+        </div>
+        <div class="epd-counter">
+          <div class="epd-counter-label">Calorías quemadas</div>
+          <div class="epd-counter-value">
+            <span id="epd-kcal">${kcalStr}</span><span class="epd-counter-unit">kcal</span>
+          </div>
+        </div>
+      </div>
+      ${noGarminBanner}
+      <div class="kpi-date">
+        Báscula: ${refAt ? new Date(refAt).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'}
+        · Tasa: ${lossRate ? (lossRate*1000).toFixed(1)+' g/h' : '—'}
+        · Garmin: ${garminStatus?.last_sync ? formatTime(garminStatus.last_sync) : 'sin datos'}
+      </div>
+    </div>`;
+}
+
+// ── EPD Live Timer ─────────────────────────────────────────────
+function startEPDLiveUpdate() {
+  if (epdTimerHandle) clearInterval(epdTimerHandle);
+  if (!epdData) return;
+
+  const refAt      = epdData.last_ref_weight_at || epdData.last_weight_at;
+  const refDt      = new Date(refAt);
+  const base       = epdData.estimated_weight;
+  const baseAt     = new Date(epdData.computed_at);
+  const rate       = epdData.loss_rate_kg_h || 0;
+  const kcalRate   = rate * 7700;
+
+  function tick() {
+    const now        = new Date();
+    const elapsedH   = (now - baseAt) / 3600000;   // para peso (ancla en computed_at)
+    const totalH     = (now - refDt)  / 3600000;   // para masa/kcal (ancla en pesaje)
+
+    const newWeight  = base - rate * elapsedH;
+    const newLost    = rate * totalH;
+    const newKcal    = Math.round(kcalRate * totalH);
+
+    const wEl = document.getElementById('epd-weight');
+    const lEl = document.getElementById('epd-lost');
+    const kEl = document.getElementById('epd-kcal');
+    const tEl = document.getElementById('epd-timer');
+
+    if (wEl) wEl.textContent = newWeight.toFixed(2);
+    if (lEl) lEl.textContent = newLost.toFixed(3);
+    if (kEl) kEl.textContent = newKcal.toLocaleString();
+    if (tEl && refAt) tEl.textContent = formatElapsed(refAt);
+  }
+
+  tick();
+  epdTimerHandle = setInterval(tick, 5000);
+}
+
+function formatElapsed(isoStr) {
+  const diff = Math.floor((Date.now() - new Date(isoStr)) / 1000);
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  const s = diff % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+// ── KPI Card (Renpho) ──────────────────────────────────────────
+function renderKPICard(type, label, data, unit) {
+  const deltaHTML = renderDelta(data.delta, unit);
+  const dateStr   = data.measured_at
+    ? new Date(data.measured_at).toLocaleString('es-ES',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    : '';
+  return `
+    <div class="kpi-card" onclick="openChart('${type}')">
+      <div class="kpi-source"><span class="kpi-source-dot"></span>Renpho</div>
+      <div class="kpi-label">${label}</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">${data.value}</span>
+        <span class="kpi-unit">${unit}</span>
+      </div>
+      ${deltaHTML}
+      <div class="kpi-date">Medición: ${dateStr}</div>
+    </div>`;
+}
+
+function renderMetabolicCard(data) {
+  const deltaHTML = renderDelta(data.delta, 'kcal/h', true);
+  const maxHTML   = data.historical_max
+    ? `<div style="font-size:11px;color:var(--text-3);margin-top:6px">
+         Máx. histórico: <strong style="color:var(--text-2)">${data.historical_max} kcal/h</strong>
+       </div>`
+    : '';
+  const rhrHTML = data.resting_hr
+    ? `<div class="kpi-date">FC reposo: ${data.resting_hr} ppm · Base histórica: ${data.rhr_baseline ?? '—'} ppm</div>`
+    : '';
+  return `
+    <div class="kpi-card" onclick="openChart('metabolic-rate')">
+      <div class="kpi-source"><span class="kpi-source-dot" style="background:var(--orange)"></span>Garmin</div>
+      <div class="kpi-label">Tasa metabólica fitness</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">${data.value}</span>
+        <span class="kpi-unit">kcal/h</span>
+      </div>
+      ${deltaHTML}
+      ${maxHTML}
+      ${rhrHTML}
+    </div>`;
+}
+
+function renderDelta(delta, unit, higherIsBetter = false) {
+  if (delta === null || delta === undefined) return '';
+  const sign  = delta > 0 ? '+' : '';
+  const good  = higherIsBetter ? delta > 0 : delta < 0;
+  const bad   = higherIsBetter ? delta < 0 : delta > 0;
+  const cls   = good ? 'negative' : bad ? 'positive' : 'neutral';
+  const arrow = delta > 0
+    ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M18 15l-6-6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>'
+    : delta < 0
+    ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>'
+    : '';
+  return `<div class="kpi-delta ${cls}">${arrow}${sign}${delta} ${unit} vs anterior</div>`;
+}
+
+// ── Sync ───────────────────────────────────────────────────────
+async function syncData() {
+  const btn = document.getElementById('sync-btn');
+  btn.classList.add('syncing');
+
+  const result = await apiFetch('/api/sync', { method: 'POST' });
+  btn.classList.remove('syncing');
+
+  if (!result) { showToast('Sin conexiones configuradas', null); return; }
+
+  const r = result.results || {};
+  const msgs = [];
+
+  if (r.renpho?.success) {
+    const n = r.renpho.new_records;
+    msgs.push(n > 0 ? `Renpho: ↑ ${n} registros` : 'Renpho al día');
+  } else if (r.renpho?.error) {
+    msgs.push('Renpho: error');
+  }
+
+  if (r.garmin?.success) {
+    const n = r.garmin.new_records;
+    msgs.push(n > 0 ? `Garmin: ↑ ${n} días` : 'Garmin al día');
+  } else if (r.garmin?.error) {
+    msgs.push('Garmin: error · ' + r.garmin.error.substring(0, 40));
+  }
+
+  if (msgs.length) showToast(msgs.join(' · '), r.renpho?.success || r.garmin?.success ? 'success' : 'error');
+
+  await loadKPIs();
+  document.getElementById('sync-status').textContent = 'Actualizado ' + formatTime(result.synced_at);
+}
+
+function updateSyncStatus(connectors) {
+  const el = document.getElementById('sync-status');
+  if (!connectors?.length) return;
+  const last = connectors.map(c => c.last_sync).filter(Boolean).sort().pop();
+  if (last) el.textContent = `Últ. sync ${formatTime(last)}`;
+}
+
+// ── Ingestion Modal ────────────────────────────────────────────
+function openIngestionModal() {
+  openModal('ingestion-modal');
+}
+
+async function answerIngestion(ateFood) {
+  closeModal('ingestion-modal');
+  const result = await apiFetch('/api/epd/process_weight', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fasting: !ateFood }),
+  });
+  if (result?.action === 'calibrated') {
+    showToast('EPD recalibrado con nuevo pesaje en ayunas ✓', 'success');
+    await loadKPIs();
+  } else {
+    showToast('Referencia EPD actualizada', null);
+    await loadKPIs();
+  }
+}
+
+// ── Settings Modal ─────────────────────────────────────────────
+async function openSettings() {
+  const [renpho, garmin] = await Promise.all([
+    apiFetch('/api/connectors/renpho/status'),
+    apiFetch('/api/connectors/garmin/status'),
+  ]);
+
+  const mkRow = (name, icon, cls, data, setupModal, extraBtn = '') => {
+    const ok       = data?.configured;
+    const email    = ok ? data.email : null;
+    const lastSync = data?.last_sync;
+    return `
+      <div class="connector-row">
+        <div class="connector-icon ${cls}">${icon}</div>
+        <div class="connector-info">
+          <div class="connector-name">${name}</div>
+          <div class="connector-status ${ok ? 'ok' : ''}">
+            ${ok ? `✓ ${email}${lastSync ? ' · sync ' + formatTime(lastSync) : ''}` : 'No conectado'}
+          </div>
+        </div>
+        ${ok
+          ? `${extraBtn}<button class="btn btn-ghost btn-sm" onclick="disconnectConnector('${cls}',this)">Desconectar</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="closeModal('settings-modal');openModal('${setupModal}')">Conectar</button>`
+        }
+      </div>`;
+  };
+
+  document.getElementById('connector-list').innerHTML =
+    mkRow('Renpho Health', renphoSVG(), 'renpho', renpho, 'setup-modal') +
+    mkRow('Garmin Connect', garminSVG(), 'garmin', garmin, 'garmin-modal');
+
+  openModal('settings-modal');
+}
+
+function renphoSVG() {
+  return `<svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+    <rect x="3" y="6" width="18" height="12" rx="3" stroke="currentColor" stroke-width="2"/>
+    <path d="M8 12h8M12 9v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>`;
+}
+function garminSVG() {
+  return `<svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+    <path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>`;
+}
+
+
+async function disconnectConnector(cls, btn) {
+  if (!confirm('¿Eliminar conexión y todos sus datos?')) return;
+  btn.disabled = true;
+  const name = cls === 'renpho' ? 'renpho' : 'garmin';
+  await apiFetch(`/api/connectors/${name}`, { method: 'DELETE' });
+  showToast(`${name} desconectado`, null);
+  closeModal('settings-modal');
+  await loadDashboard();
+}
+
+// ── Renpho Setup ───────────────────────────────────────────────
+async function submitRenphoSetup() {
+  const email     = document.getElementById('renpho-email').value.trim();
+  const password  = document.getElementById('renpho-pass').value;
+  const errEl     = document.getElementById('setup-error');
+  const progEl    = document.getElementById('setup-progress');
+  const msgEl     = document.getElementById('progress-msg');
+  const barEl     = document.getElementById('progress-bar');
+  const submitBtn = document.getElementById('setup-submit-btn');
+
+  errEl.classList.remove('visible');
+  if (!email || !password) {
+    errEl.textContent = 'Introduce email y contraseña.';
+    errEl.classList.add('visible');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  progEl.style.display = 'block';
+  msgEl.textContent = 'Conectando con Renpho…';
+  barEl.classList.remove('done');
+
+  try {
+    const result = await apiFetch('/api/connectors/renpho/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (result?.success) {
+      barEl.classList.add('done');
+      msgEl.textContent = `✓ ${result.message}`;
+      await new Promise(r => setTimeout(r, 900));
+      closeModal('setup-modal');
+      showToast(result.message, 'success');
+      await loadDashboard();
+    } else {
+      throw new Error(result?.detail || 'Error desconocido');
+    }
+  } catch (e) {
+    progEl.style.display = 'none';
+    errEl.textContent = e.message || 'No se pudo conectar. Verifica tus credenciales.';
+    errEl.classList.add('visible');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+// ── Garmin Setup ───────────────────────────────────────────────
+async function submitGarminSetup() {
+  const email     = document.getElementById('garmin-email').value.trim();
+  const password  = document.getElementById('garmin-pass').value;
+  const errEl     = document.getElementById('garmin-error');
+  const progEl    = document.getElementById('garmin-progress');
+  const msgEl     = document.getElementById('garmin-progress-msg');
+  const barEl     = document.getElementById('garmin-progress-bar');
+  const submitBtn = document.getElementById('garmin-submit-btn');
+
+  errEl.classList.remove('visible');
+  if (!email || !password) {
+    errEl.textContent = 'Introduce email y contraseña de Garmin Connect.';
+    errEl.classList.add('visible');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  progEl.style.display = 'block';
+  msgEl.textContent = 'Autenticando en Garmin Connect…';
+  barEl.classList.remove('done');
+
+  try {
+    const result = await apiFetch('/api/connectors/garmin/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (result?.success) {
+      barEl.classList.add('done');
+      msgEl.textContent = `✓ ${result.message}`;
+      await new Promise(r => setTimeout(r, 900));
+      closeModal('garmin-modal');
+      showToast(result.message, 'success');
+      await loadDashboard();
+    } else {
+      throw new Error(result?.detail || 'Error desconocido');
+    }
+  } catch (e) {
+    progEl.style.display = 'none';
+    errEl.textContent = e.message || 'Credenciales incorrectas o error de red.';
+    errEl.classList.add('visible');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+// ── Chart ──────────────────────────────────────────────────────
+async function openChart(type) {
+  activeChartType = type;
+  activePeriod    = 'all';
+  document.querySelectorAll('.period-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.period === 'all'));
+  const titles    = { weight: 'Histórico de peso', 'body-fat': 'Histórico de grasa corporal', 'metabolic-rate': 'Tasa metabólica fitness', 'kcal-factor': 'Evolución factor kcal/kg' };
+  const subtitles = { weight: 'Renpho Health',    'body-fat': 'Renpho Health',                 'metabolic-rate': 'Garmin Connect',           'kcal-factor': 'Calibración EPD' };
+  document.getElementById('chart-title').textContent    = titles[type]    || 'Histórico';
+  document.getElementById('chart-subtitle').textContent = subtitles[type] || '';
+  openModal('chart-modal');
+  await loadChartData(type, 'all');
+}
+
+async function changePeriod(el) {
+  document.querySelectorAll('.period-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  activePeriod = el.dataset.period;
+  await loadChartData(activeChartType, activePeriod);
+}
+
+async function loadChartData(type, period) {
+  const epMap = { weight: '/api/history/weight', 'body-fat': '/api/history/body-fat', 'metabolic-rate': '/api/history/metabolic-rate', 'kcal-factor': '/api/history/kcal-factor' };
+  const ep   = epMap[type] || '/api/history/weight';
+  const data = await apiFetch(`${ep}?period=${period}`);
+  if (!data?.data?.length) { renderChart([],[],type); updateStats([],type); return; }
+  renderChart(data.data.map(d => d.date), data.data.map(d => d.value), type);
+  updateStats(data.data.map(d => d.value), type);
+}
+
+function renderChart(labels, values, type) {
+  const ctx = document.getElementById('history-chart').getContext('2d');
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  const unitMap  = { weight: ' kg', 'body-fat': ' %', 'metabolic-rate': ' kcal/h', 'kcal-factor': ' kcal/kg' };
+  const colorMap = { weight: '#0071e3', 'body-fat': '#ff9500', 'metabolic-rate': '#34c759', 'kcal-factor': '#af52de' };
+  const unit  = unitMap[type]  || '';
+  const color = colorMap[type] || '#0071e3';
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{
+      data: values, borderColor: color, backgroundColor: color + '14',
+      borderWidth: 2, pointRadius: labels.length > 60 ? 0 : 3,
+      pointHoverRadius: 5, tension: .35, fill: true
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(29,29,31,.92)', titleColor: '#aeaeb2',
+          bodyColor: '#fff', bodyFont: { size: 15, weight: '600' }, padding: 10,
+          callbacks: { label: ctx => `${ctx.parsed.y}${unit}` }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#aeaeb2', font: { size: 11 }, maxTicksLimit: 8, maxRotation: 0 }},
+        y: { grid: { color: '#f0f0f3' }, ticks: { color: '#aeaeb2', font: { size: 11 }, callback: v => v + unit }}
+      }
+    }
+  });
+}
+
+function updateStats(values, type) {
+  const unitMap2 = { weight: ' kg', 'body-fat': '%', 'metabolic-rate': ' kcal/h', 'kcal-factor': ' kcal/kg' };
+  const unit = unitMap2[type] || '';
+  if (!values.length) {
+    ['stat-min','stat-max','stat-avg'].forEach(id => document.getElementById(id).textContent = '—');
+    return;
+  }
+  document.getElementById('stat-min').textContent = Math.min(...values).toFixed(1) + unit;
+  document.getElementById('stat-max').textContent = Math.max(...values).toFixed(1) + unit;
+  document.getElementById('stat-avg').textContent = (values.reduce((a,b)=>a+b,0)/values.length).toFixed(1) + unit;
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+async function apiFetch(url, options = {}) {
+  try {
+    const res = await fetch(API + url, options);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (e) {
+    if (!e.message?.includes('fetch')) console.error('API error:', e);
+    return null;
+  }
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow = '';
+  if (id === 'chart-modal' && chartInstance) { chartInstance.destroy(); chartInstance = null; }
+}
+
+function showToast(msg, type = null) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (type ? ` ${type}` : '');
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  const d    = new Date(iso);
+  const diff = (Date.now() - d) / 1000;
+  if (diff < 60)    return 'ahora';
+  if (diff < 3600)  return `hace ${Math.floor(diff/60)}min`;
+  if (diff < 86400) return `hace ${Math.floor(diff/3600)}h`;
+  return d.toLocaleDateString('es-ES', {day:'2-digit', month:'short'});
+}
+</script>
+</body>
+</html>

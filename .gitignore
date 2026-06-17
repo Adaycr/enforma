@@ -1,0 +1,24 @@
+# Virtual environment
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Data sensible — clave de cifrado y base de datos local
+data/.key
+data/dashboard.db
+data/*.db
+
+# Archivos de entorno
+.env
+*.env
+
+# IDE / sistema
+.DS_Store
+*.swp
+*.swo
+
+# Claude Code settings locales
+.claude/settings.local.json
