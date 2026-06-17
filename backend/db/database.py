@@ -230,60 +230,79 @@ class Database:
         return count
 
     def get_weight_kpi(self) -> Optional[dict]:
-        """Returns current weight + delta vs previous measurement."""
+        """Returns current weight + delta vs previous different-day measurement."""
         with self._get_conn() as conn:
-            rows = conn.execute("""
+            current_row = conn.execute("""
                 SELECT measured_at, weight_kg
                 FROM renpho_measurements
                 WHERE weight_kg IS NOT NULL
                 ORDER BY measured_at DESC
-                LIMIT 2
-            """).fetchall()
-            
-            if not rows:
+                LIMIT 1
+            """).fetchone()
+
+            if not current_row:
                 return None
-            
-            current = dict(rows[0])
-            previous = dict(rows[1]) if len(rows) > 1 else None
-            
+
+            current = dict(current_row)
+            today   = current["measured_at"][:10]
+
+            # Compare against the most recent measurement from a different day
+            previous_row = conn.execute("""
+                SELECT measured_at, weight_kg
+                FROM renpho_measurements
+                WHERE weight_kg IS NOT NULL
+                  AND measured_at < ?
+                ORDER BY measured_at DESC
+                LIMIT 1
+            """, (today,)).fetchone()
+
             delta = None
-            if previous and previous["weight_kg"]:
-                delta = round(current["weight_kg"] - previous["weight_kg"], 2)
-            
+            if previous_row and previous_row["weight_kg"]:
+                delta = round(current["weight_kg"] - previous_row["weight_kg"], 2)
+
             return {
-                "value": round(current["weight_kg"], 1),
-                "unit": "kg",
+                "value":      round(current["weight_kg"], 1),
+                "unit":       "kg",
                 "measured_at": current["measured_at"],
-                "delta": delta,
+                "delta":      delta,
                 "delta_unit": "kg"
             }
 
     def get_body_fat_kpi(self) -> Optional[dict]:
-        """Returns current body fat % + delta."""
+        """Returns current body fat % + delta vs previous different-day measurement."""
         with self._get_conn() as conn:
-            rows = conn.execute("""
+            current_row = conn.execute("""
                 SELECT measured_at, body_fat_pct
                 FROM renpho_measurements
                 WHERE body_fat_pct IS NOT NULL
                 ORDER BY measured_at DESC
-                LIMIT 2
-            """).fetchall()
-            
-            if not rows:
+                LIMIT 1
+            """).fetchone()
+
+            if not current_row:
                 return None
-            
-            current = dict(rows[0])
-            previous = dict(rows[1]) if len(rows) > 1 else None
-            
+
+            current = dict(current_row)
+            today   = current["measured_at"][:10]
+
+            previous_row = conn.execute("""
+                SELECT measured_at, body_fat_pct
+                FROM renpho_measurements
+                WHERE body_fat_pct IS NOT NULL
+                  AND measured_at < ?
+                ORDER BY measured_at DESC
+                LIMIT 1
+            """, (today,)).fetchone()
+
             delta = None
-            if previous and previous["body_fat_pct"]:
-                delta = round(current["body_fat_pct"] - previous["body_fat_pct"], 2)
-            
+            if previous_row and previous_row["body_fat_pct"]:
+                delta = round(current["body_fat_pct"] - previous_row["body_fat_pct"], 2)
+
             return {
-                "value": round(current["body_fat_pct"], 1),
-                "unit": "%",
+                "value":      round(current["body_fat_pct"], 1),
+                "unit":       "%",
                 "measured_at": current["measured_at"],
-                "delta": delta,
+                "delta":      delta,
                 "delta_unit": "%"
             }
 
