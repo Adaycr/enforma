@@ -12,7 +12,8 @@ Las básculas solo registran el peso en el momento del pesaje. EnForma responde 
 
 - **EPD en vivo** — peso estimado con live ticker que se actualiza cada 5 s sin polling al servidor
 - **Datos intradiarios** — FC (~15 s), estrés (~3 min), respiración y actividades con timestamp exacto; no promedios diarios
-- **Auto-calibración** — gradient descent ajusta los parámetros del modelo en cada pesaje en ayunas
+- **Auto-calibración** — gradient descent ajusta los parámetros del modelo cuando han pasado ≥ 2 h y el usuario confirma ayuno
+- **Sync matutino automático** — cron job a las 7:00 que sincroniza Renpho y Garmin si la app está corriendo
 - **100% local** — ningún dato sale del equipo; todo en SQLite local
 - **Cifrado en reposo** — credenciales cifradas con AES-256 derivado del ID de máquina (PBKDF2 + Fernet)
 - **Históricos con gráficos** — peso, % grasa, tasa metabólica, factor kcal/kg; filtros por semana / mes / año
@@ -37,9 +38,12 @@ Se abre automáticamente en `http://localhost:8000`.
 
 ## Uso diario
 
-1. Pulsa **Actualizar** — sincroniza nuevos pesajes y datos Garmin
-2. Si hay un peso nuevo, confirma si estabas en ayunas → el algoritmo se calibra
-3. El ticker EPD muestra el peso estimado en tiempo real
+El sync matutino (7:00) descarga automáticamente los datos de la noche si la app está corriendo.
+
+1. Pésate por la mañana en ayunas
+2. Pulsa **Actualizar** — sincroniza nuevos pesajes y datos Garmin
+3. Si hay un peso nuevo, confirma que llevabas ≥ 2 h en ayunas → el algoritmo calibra sus parámetros
+4. El ticker EPD muestra el peso estimado en tiempo real
 
 ## Algoritmo EPD
 
@@ -67,6 +71,7 @@ backend/
     └── garmin.py    # Conector Garmin (diario + intradiario)
 frontend/
 └── index.html       # SPA vanilla: KPIs, gráficos, live ticker
+sync_morning.sh      # Sync automático vía cron (07:00 diario)
 ```
 
 ## Seguridad

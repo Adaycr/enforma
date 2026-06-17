@@ -1,6 +1,6 @@
 # EnForma — Documentación Completa
 
-**Versión:** 1.1 · **Fecha:** junio 2026 · **Repositorio:** https://github.com/Adaycr/enforma
+**Versión:** 1.2 · **Fecha:** junio 2026 · **Repositorio:** https://github.com/Adaycr/enforma
 
 ---
 
@@ -33,6 +33,7 @@ Las básculas inteligentes solo registran el peso en el momento del pesaje. EnFo
 - **Cifrado en reposo**: las credenciales se cifran con AES-256 derivado del ID de máquina.
 - **Auto-calibración**: el algoritmo EPD aprende de cada pesaje nuevo y ajusta sus parámetros internos.
 - **Datos intradiarios**: desde v1.1, usa muestras de FC, estrés y respiración a nivel de minuto (no promedios diarios) y calorías activas con timestamp exacto por actividad.
+- **Sync automático**: cron job diario a las 7:00 que sincroniza los conectores si la app está corriendo.
 
 ---
 
@@ -92,8 +93,8 @@ Single-page application sin framework. Se carga desde `/` y comunica con el back
 
 **Tarjetas KPI:**
 - **EPD — Peso estimado ahora** (tarjeta destacada): muestra el peso calculado en tiempo real con live ticker que se actualiza cada 5 segundos sin llamadas al servidor.
-- **Peso báscula (Renpho)**: último pesaje registrado + delta vs. medición anterior.
-- **% Grasa corporal (Renpho)**: última medición de bioimpedancia + delta.
+- **Peso báscula (Renpho)**: último pesaje registrado + delta vs. último pesaje de un **día distinto** (no vs. el pesaje inmediatamente anterior del mismo día).
+- **% Grasa corporal (Renpho)**: última medición de bioimpedancia + delta vs. día anterior.
 - **Tasa metabólica fitness (Garmin)**: kcal/h ajustadas por FC de reposo como proxy de forma física.
 - **Factor kcal/kg (EPD)**: parámetro interno del algoritmo; refleja cuántas kcal equivalen a 1 kg de tejido según calibración personal.
 
@@ -192,7 +193,13 @@ Refleja la pérdida de agua por respiración y sudoración:
 
 ### 4.3 Auto-calibración (gradient descent)
 
-Se ejecuta cuando el usuario confirma que el nuevo pesaje fue en **ayunas** (condición necesaria: peso no contaminado por comida reciente).
+Se ejecuta cuando se cumplen **dos condiciones simultáneas**:
+1. Han transcurrido **≥ 2 horas** desde el pesaje de referencia anterior.
+2. El usuario confirma que **no ha ingerido comida ni bebida** desde el pesaje anterior.
+
+Con menos de 2 horas, el sistema actualiza la referencia pero no calibra: la señal fisiológica (pérdida hídrica y metabólica real) es demasiado pequeña comparada con el ruido del sensor de la báscula.
+
+> **Por qué 2 horas y no más**: en pruebas con múltiples pesajes intradía, umbrales de 8 horas o el filtro de "mismo día" resultaban demasiado restrictivos para usuarios que ayunan 6–7 horas. Con 2 horas hay suficiente señal y el usuario controla la validez mediante la confirmación de ayuno.
 
 **Calibración de `evaporation_rate`:**
 ```
@@ -202,13 +209,15 @@ water_error = error_total − corrección_metabólica   (si hay datos de grasa)
 evaporation_rate = clamp(evaporation_rate − Δevap, 0.010, 0.120)
 ```
 
-**Calibración de `kcal_factor`** (solo cuando hay dos pesajes consecutivos con datos de % grasa corporal de Renpho):
+**Calibración de `kcal_factor`** (solo cuando hay dos pesajes en días distintos con datos de % grasa corporal de Renpho y pérdida de grasa ≥ 50 g):
 ```
 fat_lost_kg = fat_mass_ref − fat_mass_new
 kcal_factor_implied = kcal_quemadas / fat_lost_kg
 Δkcal = learn_rate_kcal × (kcal_factor_implied − kcal_factor)
 kcal_factor = clamp(kcal_factor + Δkcal, 5000, 11000)
 ```
+
+> **Por qué el factor kcal/kg puede no actualizarse**: la calibración exige una diferencia de grasa medible ≥ 50 g entre los dos pesajes (umbral del ruido de la bioimpedancia). Si todos los pesajes son intradía (0–6 h de diferencia), la señal de grasa es menor que el ruido de la báscula y el factor no cambia. Necesita pesajes en días distintos con ayuno verificado para observar pérdida real de tejido adiposo.
 
 **Calibración de `fitness_factor`** (basada en respiración de reposo nocturna):
 - Respiración < 13 rpm → reduce 0.3%/día (atleta muy fit → menos pérdida por respiración)
@@ -429,6 +438,15 @@ Formato de serie: `[{"date": "2026-06-16", "value": 82.0}, ...]`
 | `GET` | `/api/kpi/epd` | — | Calcula el peso estimado en este instante |
 | `POST` | `/api/epd/process_weight` | `{"fasting": bool}` | Procesa un nuevo pesaje: con ayunas calibra el algoritmo |
 
+Posibles valores del campo `action` en la respuesta de `POST /api/epd/process_weight`:
+
+| Valor de `action` | Condición | Efecto |
+|---|---|---|
+| `reference_set` | Primera vez (no había referencia anterior) | Solo guarda la referencia |
+| `reference_updated_interval_too_short` | `fasting=true` pero < 2 h desde último pesaje | Actualiza referencia; **no calibra** (señal insuficiente) |
+| `calibrated` | `fasting=true` y ≥ 2 h | Calibra parámetros y actualiza referencia |
+| `reference_updated_no_calibration` | `fasting=false` | Actualiza referencia sin calibrar |
+
 Respuesta de `/api/kpi/epd`:
 ```json
 {
@@ -544,16 +562,35 @@ enforma/
 │       └── garmin.py         # Conector Garmin Connect
 ├── frontend/
 │   └── index.html            # SPA: dashboard, KPIs, gráficos
+├── sync_morning.sh           # Script de sync automático (cron 7:00)
 └── data/                     # Generado automáticamente; NO commitear
     ├── .key                  # Salt de cifrado (permisos 0600)
-    └── dashboard.db          # Base de datos SQLite
+    ├── dashboard.db          # Base de datos SQLite
+    └── sync_morning.log      # Log de syncs automáticos
 ```
 
 ---
 
 ## 9. Flujo de uso diario
 
+### 9.1 Sync automático matutino (07:00)
+
+El cron job `sync_morning.sh` se ejecuta cada día a las 7:00 y llama a `POST /api/sync` si la app está corriendo. El resultado queda en `data/sync_morning.log`. El usuario no necesita hacer nada; cuando abre el dashboard, los datos de la noche ya están sincronizados.
+
+Instalar / verificar cron:
+```bash
+crontab -l   # debe aparecer: 0 7 * * * /home/xilinx/Escritorio/enforma/sync_morning.sh
 ```
+
+### 9.2 Flujo tras un nuevo pesaje
+
+```
+07:00 — sync_morning.sh (automático si la app está corriendo)
+         ├─▶ Garmin: nuevas actividades, FC, estrés, respiración del día anterior
+         └─▶ Renpho: pesajes nocturnos o matutinos pendientes
+         │
+         ▼ (o manualmente: pulsar "Actualizar" en el dashboard)
+
 Usuario se pesa (báscula Renpho)
          │
          ▼
@@ -564,12 +601,14 @@ Usuario se pesa (báscula Renpho)
          │
          ▼
 ¿Hay peso nuevo sin procesar?
-  SÍ ──▶ Modal: "¿Estabas en ayunas?"
+  SÍ ──▶ Modal: "¿Han pasado ≥ 2 h y estabas en ayunas?"
+         │
          ├─▶ SÍ ──▶ /api/epd/process_weight {fasting: true}
-         │          ├─▶ Calcula estimación con params actuales
-         │          ├─▶ Calibra evaporation_rate y kcal_factor
-         │          ├─▶ Guarda en epd_calibration_history
-         │          └─▶ Actualiza last_ref_weight
+         │          ├─▶ ¿elapsed_h ≥ 2?
+         │          │    SÍ ──▶ Calibra evaporation_rate + kcal_factor
+         │          │           Guarda en epd_calibration_history
+         │          │    NO ──▶ Solo actualiza referencia (action: reference_updated_interval_too_short)
+         │          └─▶ Actualiza last_ref_weight en ambos casos
          │
          └─▶ NO ──▶ /api/epd/process_weight {fasting: false}
                     └─▶ Solo actualiza last_ref_weight (sin calibrar)
@@ -578,7 +617,7 @@ Usuario se pesa (báscula Renpho)
 Dashboard actualizado:
   - EPD: nuevo peso estimado (≈ peso báscula, elapsed_h ≈ 0)
   - Live ticker: empieza a contar pérdida desde ahora
-  - KPIs Renpho: nuevo peso, % grasa, deltas
+  - KPIs Renpho: nuevo peso, % grasa, deltas vs. día anterior
   - KPIs Garmin: tasa metabólica, FC reposo
 ```
 
@@ -596,6 +635,16 @@ Dashboard actualizado:
 | Single-user | Sin autenticación web; solo apto para uso personal en equipo local |
 | Portabilidad de datos | El fichero `data/` solo funciona en el mismo equipo (clave ligada al hardware) |
 | Garmin sync lento | El setup inicial descarga datos intradiarios día a día respetando rate limits (~3–5 min para 90 días) |
+
+### Correcciones aplicadas (historial)
+
+| Versión | Corrección |
+|---|---|
+| v1.1 | Calorías activas de Garmin ahora usan timestamp exacto por actividad (antes: acumulado diario completo que incluía horas previas al pesaje) |
+| v1.1 | Datos intradiarios de FC, estrés y respiración reemplazaron los promedios diarios |
+| v1.2 | Guardia de calibración: si < 2 h desde último pesaje, el sistema actualiza la referencia pero no calibra (antes podía calibrar con señal de ruido y corromper parámetros) |
+| v1.2 | KPI delta de peso ahora compara vs. pesaje de un día distinto (antes comparaba vs. pesaje inmediatamente anterior, mostrando variaciones intradía de ±200–400 g) |
+| v1.2 | Cron job matutino de sync automático a las 07:00 |
 
 ### Roadmap
 
